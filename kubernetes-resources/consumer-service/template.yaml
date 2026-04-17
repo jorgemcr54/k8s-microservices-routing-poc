@@ -1,0 +1,496 @@
+Inicio minikube con calico(plugin de red para que tome las netpol)
+minikube start --cni=calico
+
+
+istio
+curl -L https://istio.io/downloadIstio | sh -
+cd istio-*
+export PATH=$PWD/bin:$PATH
+
+istioctl install --set profile=demo -y
+
+
+prometheus
+kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.20/samples/addons/prometheus.yaml
+
+kiali
+kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.20/samples/addons/kiali.yaml
+
+---
+
+### Fase 1: El Escenario Actual (AS-IS)
+Aquí montamos la infraestructura que ya tienes: la restricción de red y el consumo que "da la vuelta" por el balanceador (Ingress Gateway).
+
+**1. Preparar Namespaces y Bloqueo de Red**
+```bash
+# Crear namespaces
+kubectl create namespace consumidor-dep
+kubectl create namespace app-response-translator
+
+kubectl create namespace consumidor-pagos
+
+kubectl create namespace consumidor-operativo
+kubectl label namespace consumidor-operativo istio-injection=enabled
+# Habilitar Istio en ambos
+kubectl label namespace consumidor-dep istio-injection=enabled
+kubectl label namespace consumidor-pagos istio-injection=enabled
+kubectl label namespace app-response-translator istio-injection=enabled
+
+# Aplicar la Network Policy de Bloqueo (Default Deny)
+kubectl apply -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-cross-ns
+  namespace: app-response-translator
+spec:
+  podSelector: {} # Protege a TODOS los pods en el ns
+  policyTypes:
+  - Ingress
+  # Al no haber reglas de 'ingress', bloquea todo el tráfico de otros NS
+EOF
+--- Netpol para ingressgateway legacy
+kubectl apply -n app-response-translator -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: permitir-ingress-gateway
+  namespace: app-response-translator
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: istio-system
+      podSelector:
+        matchLabels:
+          istio: ingressgateway
+EOF
+
+```
+
+**2. Desplegar los Componentes app-response-translator (Versión Actual)**
+Cada flujo tiene su propio Service para que el balanceador sepa a dónde ir.
+```bash
+kubectl apply -n app-response-translator -f - <<EOF
+# --- SERVICIO MONETARIO ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-response-translator-monetario
+spec:
+  selector:
+    matchLabels:
+      app: app-response-translator
+      flow: monetario
+  template:
+    metadata:
+      labels:
+        app: app-response-translator
+        flow: monetario
+        version: monetario
+    spec:
+      containers:
+      - name: httpbin
+        image: kennethreitz/httpbin
+        ports:
+        - containerPort: 80
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-monetario-legacy
+spec:
+  selector:
+    app: app-response-translator
+    flow: monetario
+  ports:
+  - port: 80
+    targetPort: 80
+
+---
+# --- SERVICIO NO-MONETARIO ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-response-translator-no-monetario
+spec:
+  selector:
+    matchLabels:
+      app: app-response-translator
+      flow: no-monetario
+  template:
+    metadata:
+      labels:
+        app: app-response-translator
+        flow: no-monetario
+        version: no-monetario
+    spec:
+      containers:
+      - name: httpbin
+        image: kennethreitz/httpbin
+        ports:
+        - containerPort: 80
+---
+# --- SERVICIO operativo ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-response-translator-operativo
+spec:
+  selector:
+    matchLabels:
+      app: app-response-translator
+      flow: operativo
+  template:
+    metadata:
+      labels:
+        app: app-response-translator
+        flow: operativo
+        version: operativo
+    spec:
+      containers:
+      - name: httpbin
+        image: kennethreitz/httpbin
+        ports:
+        - containerPort: 80
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-no-monetario-legacy
+spec:
+  selector:
+    app: app-response-translator
+    flow: no-monetario
+  ports:
+  - port: 80
+    targetPort: 80
+EOF
+```
+
+**3. Gateway y Virtual Service para entrada por Balanceador (Legacy)**
+```bash
+kubectl apply -n app-response-translator -f - <<EOF
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: legacy-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "midominiointerno.lab"
+EOF
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: vs-legacy
+spec:
+  hosts:
+  - "midominiointerno.lab"
+  gateways:
+  - legacy-gateway
+  http:
+  - match:
+    - uri:
+        prefix: "/legacy/monetario"
+    rewrite:
+      uri: "/"
+    route:
+    - destination:
+        host: svc-monetario-legacy.app-response-translator.svc.cluster.local
+  - match:
+    - uri:
+        prefix: "/legacy/no-monetario"
+    rewrite:
+      uri: "/"
+    route:
+    - destination:
+        host: svc-no-monetario-legacy.app-response-translator.svc.cluster.local
+EOF
+```
+
+---
+
+### Fase 2: La Aplicación Consumidora
+# --- SERVICIO CONSUMIDOR MONETARIO ---
+Un pod "durmiente" que simula ser tu servicio de negocio.
+
+```bash
+kubectl apply -n consumidor-dep -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-cliente-monetario
+spec:
+  selector:
+    matchLabels:
+      app: cliente-negocio
+      flow: monetario # ETIQUETA CLAVE
+  template:
+    metadata:
+      labels:
+        app: cliente-negocio
+        flow: monetario
+    spec:
+      containers:
+      - name: curl-client
+        image: curlimages/curl
+        command: ["sleep", "infinity"]
+EOF
+# --- SERVICIO CONSUMIDOR NO-MONETARIO ---
+kubectl apply -n consumidor-pagos -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-cliente-no-monetario
+spec:
+  selector:
+    matchLabels:
+      app: cliente-negocio
+      flow: no-monetario # ETIQUETA CLAVE
+  template:
+    metadata:
+      labels:
+        app: cliente-negocio
+        flow: no-monetario
+    spec:
+      containers:
+      - name: curl-client
+        image: curlimages/curl
+        command: ["sleep", "infinity"]
+EOF
+# --- SERVICIO CONSUMIDOR OPERATIVO ---
+kubectl apply -n consumidor-operativo -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-cliente-operativo
+spec:
+  selector:
+    matchLabels:
+      app: cliente-negocio
+      flow: operativo # ETIQUETA CLAVE
+  template:
+    metadata:
+      labels:
+        app: cliente-negocio
+        flow: operativo
+    spec:
+      containers:
+      - name: curl-client
+        image: curlimages/curl
+        command: ["sleep", "infinity"]
+EOF
+```
+
+
+
+---
+
+### Fase 3: La Nueva Estrategia (TO-BE) en Paralelo
+Aquí habilitamos el consumo directo sin romper el bloqueo para los demás.
+
+**1. El Service Único y los Subsets (Destination Rule)**
+```bash
+kubectl apply -n app-response-translator -f - <<EOF
+# Service Único para todos los flujos
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-response-translator-unico
+spec:
+  selector:
+    app: app-response-translator # Agrupa ambos deployments
+  ports:
+  - port: 80
+    targetPort: 80
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: dr-transversal
+spec:
+  host: app-response-translator-unico.app-response-translator.svc.cluster.local
+  subsets:
+  - name: monetario
+    labels:
+      flow: monetario
+  - name: no-monetario
+    labels:
+      flow: no-monetario
+  - name: operativo
+    labels:
+      flow: operativo    
+EOF
+```
+
+**2. Virtual Service de Enrutamiento por Origen (SourceLabels)**
+```bash
+kubectl apply -n app-response-translator -f - <<EOF
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: vs-target-interno
+spec:
+  hosts:
+  - app-response-translator-unico.app-response-translator.svc.cluster.local
+  http:
+  - match:
+    - sourceLabels:
+        flow: monetario
+    route:
+    - destination:
+        host: app-response-translator-unico.app-response-translator.svc.cluster.local
+        subset: monetario
+  - match:
+    - sourceLabels:
+        flow: no-monetario
+    route:
+    - destination:
+        host: app-response-translator-unico.app-response-translator.svc.cluster.local
+        subset: no-monetario
+  - match:
+    - sourceLabels:
+        flow: operativo
+    route:
+    - destination:
+        host: app-response-translator-unico.app-response-translator.svc.cluster.local
+        subset: operativo      
+  - directResponse:
+      status: 403
+      body:
+        string: "Accesos denegado - flujo no autorizado"
+        
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: dr-transversal
+spec:
+  host: app-response-translator-unico.app-response-translator.svc.cluster.local
+  subsets:
+  - name: monetario
+    labels:
+      flow: monetario
+  - name: no-monetario
+    labels:
+      flow: no-monetario
+  - name: operativo
+    labels:
+      flow: operativo            
+EOF
+```
+***********************************************************************************
+**2. Virtual Service de Enrutamiento por Origen (SourceLabels)**
+```bash
+kubectl apply -n app-response-translator -f - <<EOF
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: vs-target-interno
+spec:
+  hosts:
+  - app-response-translator-unico.app-response-translator.svc.cluster.local
+  http:
+  - match:
+    - sourceLabels:
+        flow: monetario
+    route:
+    - destination:
+        host: app-response-translator-unico.app-response-translator.svc.cluster.local
+        subset: monetario
+  - match:
+    - sourceLabels:
+        flow: no-monetario
+    route:
+    - destination:
+        host: app-response-translator-unico.app-response-translator.svc.cluster.local
+        subset: no-monetario
+  
+EOF
+```
+**************************************************************************************
+
+
+**3. La Nueva Network Policy (La Excepción Inteligente)**
+```bash
+kubectl apply -n app-response-translator -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: permitir-consumo-interno-flujos
+spec:
+  podSelector: {} 
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector: {} 
+      podSelector:
+        matchExpressions:
+        - key: flow
+          operator: In
+          values:
+          - monetario
+          - no-monetario
+EOF
+```
+
+---
+
+### Cómo verificar ambos mundos en paralelo
+
+Primero, entra al pod del cliente:
+```bash
+export POD_CLIENTE=$(kubectl get pod -n consumidor-dep -l flow=monetario -o jsonpath='{.items[0].metadata.name}')
+```
+
+**Prueba 1: Escenario Actual (Legacy)**
+Consumimos saliendo al IngressGateway (Simulando el ALB externo).
+```bash
+kubectl exec -it $POD_CLIENTE -n consumidor-dep -- curl -v -H "Host: midominiointerno.lab" http://istio-ingressgateway.istio-system.svc.cluster.local/legacy/monetario/get
+```
+*Esto funciona porque el Gateway tiene permiso de red y el tráfico es "externo" al namespace.*
+
+**Prueba 2: Escenario Nuevo (Target)**
+Consumimos directamente por el nombre del servicio interno.
+```bash
+kubectl exec -it $POD_CLIENTE -n consumidor-dep -- curl -v http://app-response-translator-unico.app-response-translator.svc.cluster.local/get
+```
+*Esto funciona porque Istio detecta que eres `flow: monetario`, te enruta al subset correcto, y la nueva Network Policy te deja pasar por red interna.*
+
+**Prueba 3: Escenario Nuevo (Target)** pagos
+Consumimos directamente por el nombre del servicio interno.
+```bash
+export POD_CLIENTE_PAGOS=$(kubectl get pod -n consumidor-pagos -l flow=no-monetario -o jsonpath='{.items[0].metadata.name}')
+
+kubectl exec -it $POD_CLIENTE_PAGOS -n consumidor-pagos -- curl -v http://app-response-translator-unico.app-response-translator.svc.cluster.local/get
+
+
+**Prueba 4: Escenario operativo
+Consumimos directamente por el nombre del servicio interno.
+```bash
+export POD_CLIENTE_OPER=$(kubectl get pod -n consumidor-operativo -l flow=operativo -o jsonpath='{.items[0].metadata.name}')
+
+kubectl exec -it $POD_CLIENTE_OPER -n consumidor-operativo -- curl -v http://app-response-translator-unico.app-response-translator.svc.cluster.local/get
+
+
+
+```json?chameleon
+{"component":"LlmGeneratedComponent","props":{"height":"700px","prompt":"Simulador de convivencia de arquitecturas en Kubernetes. El usuario puede ver dos caminos de tráfico simultáneos.\n\nEscenario:\n1. Namespace 'consumidor-dep' con un Pod 'Monetario'.\n2. Namespace 'app-response-translator' bloqueado por NetworkPolicy.\n3. Camino A (Legacy): Petición viaja al IngressGateway (Capa Externa) y luego entra al Pod Transversal.\n4. Camino B (Target): Petición viaja DIRECTAMENTE al servicio interno, el Proxy Envoy del cliente evalúa 'sourceLabels: monetario' y enruta al Pod Transversal correcto.\n\nInteractividad:\n- Botón 'Activar Flujo Legacy': Muestra la ruta larga (hacia arriba al Gateway y bajando al destino).\n- Botón 'Activar Flujo Nuevo': Muestra la ruta corta (horizontal directa entre pods).\n- Tooltips explicando por qué cada paso es exitoso (mTLS, NetPol Exception).\n\nVisualización:\n- Representar los dos flujos con colores distintos.\n- Mostrar la NetworkPolicy como una barrera con un 'túnel' abierto solo para el flujo nuevo.\n- Idioma: Español.","id":"im_d458d73ebbe9df85"}}
+```
+
+¿Lograste ver el JSON de respuesta en ambos comandos? Si es así, ¡tienes la prueba irrefutable de que la migración es viable y segura!
