@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: consumer-service
+  namespace: consumidor-dep # Asegúrate de que este sea el ns donde lo desplegaste
+spec:
+  selector:
+    app: consumer-service # Debe coincidir con el label del Deployment
+  ports:
+    - protocol: TCP
+      port: 8080      # Puerto del Service
+      targetPort: 8080 # Puerto donde corre tu Java/Spring
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: consumer-service
+  namespace: consumidor-pagos # Asegúrate de que este sea el ns donde lo desplegaste
+spec:
+  selector:
+    app: consumer-service # Debe coincidir con el label del Deployment
+  ports:
+    - protocol: TCP
+      port: 8080      # Puerto del Service
+      targetPort: 8080 # Puerto donde corre tu Java/Spring
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: consumer-service
+  namespace: consumidor-mdm # Asegúrate de que este sea el ns donde lo desplegaste
+spec:
+  selector:
+    app: consumer-service # Debe coincidir con el label del Deployment
+  ports:
+    - protocol: TCP
+      port: 8080      # Puerto del Service
+      targetPort: 8080 # Puerto donde corre tu Java/Spring
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: consumer-service
+  namespace: consumidor-test # Asegúrate de que este sea el ns donde lo desplegaste
+spec:
+  selector:
+    app: consumer-service # Debe coincidir con el label del Deployment
+  ports:
+    - protocol: TCP
+      port: 8080      # Puerto del Service
+      targetPort: 8080 # Puerto donde corre tu Java/Spring
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: dr-transversal
+  namespace: transversales 
+spec:
+  host: common-service.transversales.svc.cluster.local
+  subsets:
+    - name: monetario
+      labels:
+        flow: monetario
+    - name: no-monetario
+      labels:
+        flow: no-monetario
+    - name: operativo
+      labels:
+        flow: operativo
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: vs-target-interno
+  namespace: transversales 
+spec:
+  hosts:
+    - common-service.transversales.svc.cluster.local
+  http:
+    - match:
+        - sourceLabels:
+            flow: monetario
+      route:
+        - destination:
+            host: common-service.transversales.svc.cluster.local
+            subset: monetario
+    - match:
+        - sourceLabels:
+            flow: no-monetario
+      route:
+        - destination:
+            host: common-service.transversales.svc.cluster.local
+            subset: no-monetario
+    - match:
+        - sourceLabels:
+            flow: operativo
+      route:
+        - destination:
+            host: common-service.transversales.svc.cluster.local
+            subset: operativo
+    - directResponse:
+        status: 403
+        body:
+          string: "Accesos denegado - flujo no autorizado"

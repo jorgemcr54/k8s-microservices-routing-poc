@@ -1,45 +1,34 @@
 package co.com.bancolombia.consumer;
 
-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import lombok.RequiredArgsConstructor;
+import co.com.bancolombia.model.transversal.TransversalResponse;
+import co.com.bancolombia.model.transversal.gateways.TransversalServiceGateway;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 @Service
-@RequiredArgsConstructor
-public class RestConsumer /* implements Gateway from domain */{
-    private final WebClient client;
+public class RestConsumer implements TransversalServiceGateway {
 
+    private final WebClient legacyClient;
+    private final WebClient targetClient;
+    private final String path;
 
-    // These methods are an example that illustrates the implementation of WebClient.
-    // You should use the methods that you implement from the Gateway from the domain.
-    @CircuitBreaker(name = "testGet" /*, fallbackMethod = "testGetOk"*/) // This name should match with settings name in application.yaml
-    public Mono<ObjectResponse> testGet() {
-        return client
-                .get()
-                .retrieve()
-                .bodyToMono(ObjectResponse.class);
+    public RestConsumer(@Qualifier("legacyClient") WebClient legacyClient,
+                        @Qualifier("targetClient") WebClient targetClient,
+                        @Value("${adapter.restconsumer.path}") String path) {
+        this.legacyClient = legacyClient;
+        this.targetClient = targetClient;
+        this.path = path;
     }
 
-// Possible fallback method
-//    public Mono<String> testGetOk(Exception ignored) {
-//        return client
-//                .get() // TODO: change for another endpoint or destination
-//                .retrieve()
-//                .bodyToMono(String.class);
-//    }
-
-    @CircuitBreaker(name = "testPost") // This name should match with settings name in application.yaml
-    public Mono<ObjectResponse> testPost() {
-        ObjectRequest request = ObjectRequest.builder()
-            .val1("exampleval1")
-            .val2("exampleval2")
-            .build();
-        return client
-                .post()
-                .body(Mono.just(request), ObjectRequest.class)
+    @Override
+    public Mono<TransversalResponse> invoke(String mode) {
+        WebClient client = "legacy".equals(mode) ? legacyClient : targetClient;
+        return client.get()
+                .uri(path)
                 .retrieve()
-                .bodyToMono(ObjectResponse.class);
+                .bodyToMono(TransversalResponse.class);
     }
 }

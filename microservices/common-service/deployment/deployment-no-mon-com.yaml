@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: common-service-no-mon-com
+  namespace: transversales
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: common-service
+      version: no-mon-com
+  template:
+    metadata:
+      labels:
+        app: common-service
+        version: no-mon-com
+        flow: no-monetario
+        layer: composicion
+    spec:
+      containers:
+        - name: common-service
+          image: common-service:latest
+          imagePullPolicy: Never
+          env:
+            - name: POD_LABEL_FLOW
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['flow']
+            - name: POD_LABEL_LAYER
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['layer']
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

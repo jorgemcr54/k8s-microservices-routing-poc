@@ -1,7 +1,14 @@
-FROM eclipse-temurin:17-jdk-alpine
+FROM eclipse-temurin:21-jdk-alpine 
 VOLUME /tmp
-COPY *.jar common-service.jar
-ENV JAVA_OPTS=" -Xshareclasses:name=cacheapp,cacheDir=/cache,nonfatal -XX:+UseContainerSupport -XX:MaxRAMPercentage=70 -Djava.security.egd=file:/dev/./urandom"
-# Replace with a non-root user to avoid running the container with excessive privileges
-USER appuser
-ENTRYPOINT [ "/bin/sh", "-c", "/opt/java/openjdk/bin/java $JAVA_OPTS  -jar /common-service.jar" ]
+
+# Apuntamos a la ruta real del scaffold de Bancolombia
+COPY applications/app-service/build/libs/*.jar common-service.jar
+
+ENV JAVA_OPTS=" -XX:+UseContainerSupport -XX:MaxRAMPercentage=70 -Djava.security.egd=file:/dev/./urandom"
+
+# El usuario appuser debe existir en la imagen base o crearse. 
+# Si falla, comenta esta línea temporalmente para la PoC
+# USER appuser 
+
+# Simplificamos el ENTRYPOINT para que sea más robusto
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /common-service.jar"]

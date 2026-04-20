@@ -1,8 +1,11 @@
-FROM #{eclipse-temurin_21_alpine}#
-LABEL version="#{Build.BuildNumber}#"  description=""
+FROM eclipse-temurin:21-jdk-alpine
+
+WORKDIR /app
+
+COPY applications/app-service/build/libs/*.jar app.jar
+
 EXPOSE 8080
-COPY ConsumerService.jar app.jar
-COPY --chown=#{eclipse-temurin_21_alpine-user}#:#{eclipse-temurin_21_alpine-user}# io/opentelemetry/javaagent/opentelemetry-javaagent/1.26.0/opentelemetry-javaagent-1.26.0.jar opentelemetry-javaagent-1.26.0.jar
-ENV JAVA_OPTS="-javaagent:./opentelemetry-javaagent-1.26.0.jar -XX:+UseContainerSupport -Djava.security.egd=file:/dev/./urandom"
-USER #{eclipse-temurin_21_alpine-user}#
+
+ENV JAVA_OPTS="-XX:+UseContainerSupport -Djava.security.egd=file:/dev/./urandom"
+
 ENTRYPOINT ["sh","-c","java $JAVA_OPTS -jar app.jar"]

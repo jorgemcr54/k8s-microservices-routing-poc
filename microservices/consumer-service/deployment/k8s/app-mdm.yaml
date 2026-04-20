@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consumer-service
+  namespace: consumidor-mdm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: consumer-service
+  template:
+    metadata:
+      labels:
+        app: consumer-service
+        flow: operativo
+        layer: composicion
+    spec:
+      containers:
+        - name: consumer-service
+          image: consumer-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          env:
+            - name: LEGACY_URL
+              value: "http://istio-ingressgateway.istio-system.svc.cluster.local"
+            - name: TARGET_URL
+              value: "http://common-service.transversales.svc.cluster.local"
+            - name: COMMON_SERVICE_PATH
+              value: "/api/mci/labels"
+            - name: API_BASE_PATH
+              value: "/api/v1/mdm"

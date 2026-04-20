@@ -1,60 +1,57 @@
 package co.com.bancolombia.api;
 
-import org.assertj.core.api.Assertions;
+import co.com.bancolombia.model.transversal.TransversalResponse;
+import co.com.bancolombia.usecase.invokecommonservice.InvokeCommonServiceUseCase;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Mono;
+
+import static org.mockito.Mockito.when;
 
 @ContextConfiguration(classes = {RouterRest.class, Handler.class})
 @WebFluxTest
+@TestPropertySource(properties = "api.base-path=/api/v1/dep")
 class RouterRestTest {
 
     @Autowired
     private WebTestClient webTestClient;
 
+    @MockitoBean
+    private InvokeCommonServiceUseCase useCase;
+
     @Test
-    void testListenGETUseCase() {
+    void testListenGETLegacy() {
+        when(useCase.invoke("legacy")).thenReturn(
+                Mono.just(TransversalResponse.builder().flow("legacy").layer("consumer").build()));
+
         webTestClient.get()
-                .uri("/api/usecase/path")
+                .uri("/api/v1/dep/legacy")
                 .accept(MediaType.APPLICATION_JSON)
                 .exchange()
                 .expectStatus().isOk()
-                .expectBody(String.class)
-                .value(userResponse -> {
-                            Assertions.assertThat(userResponse).isEmpty();
-                        }
-                );
+                .expectBody()
+                .jsonPath("$.flow").isEqualTo("legacy")
+                .jsonPath("$.layer").isEqualTo("consumer");
     }
 
     @Test
-    void testListenGETOtherUseCase() {
-        webTestClient.get()
-                .uri("/api/otherusercase/path")
-                .accept(MediaType.APPLICATION_JSON)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(String.class)
-                .value(userResponse -> {
-                            Assertions.assertThat(userResponse).isEmpty();
-                        }
-                );
-    }
+    void testListenGETTarget() {
+        when(useCase.invoke("target")).thenReturn(
+                Mono.just(TransversalResponse.builder().flow("target").layer("consumer").build()));
 
-    @Test
-    void testListenPOSTUseCase() {
-        webTestClient.post()
-                .uri("/api/usecase/otherpath")
+        webTestClient.get()
+                .uri("/api/v1/dep/target")
                 .accept(MediaType.APPLICATION_JSON)
-                .bodyValue("")
                 .exchange()
                 .expectStatus().isOk()
-                .expectBody(String.class)
-                .value(userResponse -> {
-                            Assertions.assertThat(userResponse).isEmpty();
-                        }
-                );
+                .expectBody()
+                .jsonPath("$.flow").isEqualTo("target")
+                .jsonPath("$.layer").isEqualTo("consumer");
     }
 }

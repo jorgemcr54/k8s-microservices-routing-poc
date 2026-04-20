@@ -18,29 +18,37 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 @Configuration
 public class RestConsumerConfig {
 
-    private final String url;
-
+    private final String legacyUrl;
+    private final String targetUrl;
     private final int timeout;
 
-    public RestConsumerConfig(@Value("${adapter.restconsumer.url}") String url,
+    public RestConsumerConfig(@Value("${adapter.restconsumer.legacy-url}") String legacyUrl,
+                              @Value("${adapter.restconsumer.target-url}") String targetUrl,
                               @Value("${adapter.restconsumer.timeout}") int timeout) {
-        this.url = url;
+        this.legacyUrl = legacyUrl;
+        this.targetUrl = targetUrl;
         this.timeout = timeout;
     }
 
-    @Bean
-    public WebClient getWebClient(WebClient.Builder builder) {
-        return builder
-            .baseUrl(url)
-            .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-            .clientConnector(getClientHttpConnector())
-            .build();
+    @Bean("legacyClient")
+    public WebClient getLegacyWebClient() {
+        return buildWebClient(legacyUrl);
+    }
+
+    @Bean("targetClient")
+    public WebClient getTargetWebClient() {
+        return buildWebClient(targetUrl);
+    }
+
+    private WebClient buildWebClient(String url) {
+        return WebClient.builder()
+                .baseUrl(url)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .clientConnector(getClientHttpConnector())
+                .build();
     }
 
     private ClientHttpConnector getClientHttpConnector() {
-        /*
-        IF YO REQUIRE APPEND SSL CERTIFICATE SELF SIGNED: this should be in the default cacerts trustore
-        */
         return new ReactorClientHttpConnector(HttpClient.create()
                 .compress(true)
                 .keepAlive(true)
@@ -50,5 +58,4 @@ public class RestConsumerConfig {
                     connection.addHandlerLast(new WriteTimeoutHandler(timeout, MILLISECONDS));
                 }));
     }
-
 }
