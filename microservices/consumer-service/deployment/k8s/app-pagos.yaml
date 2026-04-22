@@ -23,10 +23,10 @@ spec:
             - containerPort: 8080
           env:
             - name: LEGACY_URL
-              value: "http://istio-ingressgateway.istio-system.svc.cluster.local"
+              value: "http://istio-ingressgateway.istio-system.svc.cluster.local/legacy/no-monetario"
             - name: TARGET_URL
               value: "http://common-service.transversales.svc.cluster.local"
             - name: COMMON_SERVICE_PATH
-              value: "/api/mci/labels"
+              value: "api/mci/labels"
             - name: API_BASE_PATH
               value: "/api/v1/pagos"

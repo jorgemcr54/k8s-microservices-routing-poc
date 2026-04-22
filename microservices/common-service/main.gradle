@@ -1,6 +1,7 @@
 
 allprojects {
     repositories {
+        maven { url "https://artifactory.apps.bancolombia.com/maven-bancolombia" }
         //mavenLocal()
         mavenCentral()
     }
@@ -15,7 +16,7 @@ subprojects {
 
     java {
         toolchain {
-            languageVersion = JavaLanguageVersion.of(17)
+            languageVersion = JavaLanguageVersion.of(21)
         }
     }
 

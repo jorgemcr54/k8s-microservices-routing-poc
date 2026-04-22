@@ -28,6 +28,7 @@ public class RestConsumer implements TransversalServiceGateway {
         WebClient client = "legacy".equals(mode) ? legacyClient : targetClient;
         return client.get()
                 .uri(path)
+                .header("Host","midominiointerno.lab")
                 .retrieve()
                 .bodyToMono(TransversalResponse.class);
     }

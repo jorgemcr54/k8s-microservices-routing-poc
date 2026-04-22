@@ -1,0 +1,158 @@
+
+# =========================
+# GATEWAYS (uno por flujo)
+# =========================
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: gw-monetario-legacy
+  namespace: transversales
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http-mon
+        protocol: HTTP
+      hosts:
+        - "midominiointerno.lab"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: gw-no-monetario-legacy
+  namespace: transversales
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http-no-mon
+        protocol: HTTP
+      hosts:
+        - "midominiointerno.lab"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: gw-operativo-legacy
+  namespace: transversales
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http-oper
+        protocol: HTTP
+      hosts:
+        - "midominiointerno.lab"
+
+---
+# =========================
+# SERVICES
+# =========================
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-monetario-legacy
+  namespace: transversales
+spec:
+  selector:
+    app: common-service
+    flow: monetario
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-no-monetario-legacy
+  namespace: transversales
+spec:
+  selector:
+    app: common-service
+    flow: no-monetario
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-operativo-legacy
+  namespace: transversales
+spec:
+  selector:
+    app: common-service
+    flow: operativo
+  ports:
+    - port: 80
+      targetPort: 8080
+
+---
+# =========================
+# VIRTUAL SERVICES
+# =========================
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: vs-monetario-legacy
+  namespace: transversales
+spec:
+  hosts:
+    - "midominiointerno.lab"
+  gateways:
+    - gw-monetario-legacy
+  http:
+    - match:
+        - uri:
+            prefix: "/legacy/monetario"
+      rewrite:
+        uri: "/"
+      route:
+        - destination:
+            host: svc-monetario-legacy.transversales.svc.cluster.local
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: vs-no-monetario-legacy
+  namespace: transversales
+spec:
+  hosts:
+    - "midominiointerno.lab"
+  gateways:
+    - gw-no-monetario-legacy
+  http:
+    - match:
+        - uri:
+            prefix: "/legacy/no-monetario"
+      rewrite:
+        uri: "/"
+      route:
+        - destination:
+            host: svc-no-monetario-legacy.transversales.svc.cluster.local
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: vs-operativo-legacy
+  namespace: transversales
+spec:
+  hosts:
+    - "midominiointerno.lab"
+  gateways:
+    - gw-operativo-legacy
+  http:
+    - match:
+        - uri:
+            prefix: "/legacy/operativo"
+      rewrite:
+        uri: "/"
+      route:
+        - destination:
+            host: svc-operativo-legacy.transversales.svc.cluster.local

@@ -5,6 +5,7 @@ buildscript {
 		sonarVersion = '7.2.3.7755'
 		jacocoVersion = '0.8.14'
 		blockHoundVersion = '1.0.16.RELEASE'
+        //enablePitest = false
 	}
 }
 
@@ -27,7 +28,7 @@ sonar {
         property "sonar.junit.reportsPath", "**/build/test-results/test"
         property "sonar.java.coveragePlugin", "jacoco"
         property "sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacocoMergedReport/jacocoMergedReport.xml"
-        property "sonar.pitest.reportPaths", "build/reports/pitest/mutations.xml"
+        //property "sonar.pitest.reportPaths", "build/reports/pitest/mutations.xml"
         property "sonar.externalIssuesReportPaths", "build/issues.json"
     }
 }
