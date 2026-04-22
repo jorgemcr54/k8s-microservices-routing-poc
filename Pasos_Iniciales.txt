@@ -1,0 +1,82 @@
+# ----------
+Inicio minikube con calico(plugin de red para que tome las netpol)
+minikube start --cni=calico
+
+# ----------
+istio
+curl -L https://istio.io/downloadIstio | sh -
+cd istio-*
+export PATH=$PWD/bin:$PATH
+
+istioctl install --set profile=demo -y
+
+# ----------
+prometheus
+kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.20/samples/addons/prometheus.yaml
+
+# ----------
+kiali
+kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.20/samples/addons/kiali.yaml
+
+# ----------
+# Cambiar contexto del docker al de cluster
+eval $(minikube docker-env)
+./gradlew clean build
+# Construir common-service
+cd /mnt/c/Users/aferia/Documents/Archivos/SINT002/PruebaMinikubeTransv/k8s-microservices-routing-poc/microservices/common-service
+docker build -t common-service:latest -f deployment/Dockerfile .
+
+# Construir consumer-service
+cd /mnt/c/Users/aferia/Documents/Archivos/SINT002/PruebaMinikubeTransv/k8s-microservices-routing-poc/microservices/consumer-service
+docker build -t consumer-service:latest -f deployment/Dockerfile .
+
+# ---------- Agregar curl al pod
+apk add --no-cache curl
+
+# Desplegar common-service
+cd /mnt/c/Users/aferia/Documents/Archivos/SINT002/PruebaMinikubeTransv/k8s-microservices-routing-poc/microservices/common-service
+
+
+kubectl apply -f deployment/deployment-no-mon-com.yaml
+kubectl apply -f deployment/deployment-oper-com.yaml
+kubectl apply -f deployment/deployment-mon-com.yaml
+kubectl apply -f deployment/service.yaml
+kubectl apply -f deployment/template-legacy.yaml
+
+
+
+
+# Desplegar consumer-service en sus respectivos namespaces
+cd /mnt/c/Users/aferia/Documents/Archivos/SINT002/PruebaMinikubeTransv/k8s-microservices-routing-poc/microservices/consumer-service
+kubectl apply -f deployment/k8s/network.yaml
+kubectl apply -f deployment/k8s/app.yaml
+kubectl apply -f deployment/k8s/app-pagos.yaml
+kubectl apply -f deployment/k8s/app-mdm.yaml
+kubectl apply -f deployment/k8s/app-test.yaml
+kubectl apply -f deployment/k8s/netpol.yaml
+
+
+kubectl port-forward svc/consumer-service 8070:8080 -n consumidor-dep &
+kubectl port-forward svc/consumer-service 8071:8080 -n consumidor-pagos &
+kubectl port-forward svc/consumer-service 8072:8080 -n consumidor-mdm &
+kubectl port-forward svc/consumer-service 8073:8080 -n consumidor-test &
+kubectl port-forward svc/istio-ingressgateway 8064:80 -n istio-system
+---
+
+### Creacion de namespace 
+
+# Crear namespaces
+kubectl create namespace transversales
+kubectl create namespace consumidor-dep
+kubectl create namespace consumidor-pagos
+kubectl create namespace consumidor-mdm
+kubectl create namespace consumidor-test
+
+
+# Habilitar Istio en ambos
+kubectl label namespace consumidor-mdm istio-injection=enabled
+kubectl label namespace consumidor-dep istio-injection=enabled
+kubectl label namespace consumidor-pagos istio-injection=enabled
+kubectl label namespace consumidor-test istio-injection=enabled
+kubectl label namespace transversales istio-injection=enabled
+

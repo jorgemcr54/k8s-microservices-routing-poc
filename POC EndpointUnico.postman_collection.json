@@ -1,0 +1,142 @@
+{
+	"info": {
+		"_postman_id": "1acd98aa-31fc-4ce3-b6be-1809d40eefa9",
+		"name": "POC EndpointUnico",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Target dep",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://midominiointerno.lab:8060/api/v1/dep/target",
+					"protocol": "http",
+					"host": [
+						"midominiointerno",
+						"lab"
+					],
+					"port": "8060",
+					"path": [
+						"api",
+						"v1",
+						"dep",
+						"target"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Taget pagos",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/dep/target",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"dep",
+						"target"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Taget mdm",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/dep/target",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"dep",
+						"target"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Taget test",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8063/api/v1/test/target",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8063",
+					"path": [
+						"api",
+						"v1",
+						"test",
+						"target"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Legacy test",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8063/api/v1/test/legacy",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8063",
+					"path": [
+						"api",
+						"v1",
+						"test",
+						"legacy"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "legacy dep",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8083/api/v1/test/target",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8083",
+					"path": [
+						"api",
+						"v1",
+						"test",
+						"target"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
